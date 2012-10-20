@@ -1,0 +1,150 @@
+/*
+ * =============================================================================
+ *
+ *       Filename:  log.c
+ *
+ *    Description:  log utility.
+ *
+ *        Created:  10/20/2012 10:06:58 PM
+ *
+ *         Author:  Fu Haiping (forhappy), haipingf@gmail.com
+ *        Company:  ICT ( Institute Of Computing Technology, CAS )
+ *
+ * =============================================================================
+ */
+
+
+#include "log.h"
+
+#define TIME_NOW_BUFFER_SIZE 1024
+#define FORMAT_LOG_BUFFER_SIZE 4096
+
+static pthread_key_t time_now_buffer;
+static pthread_key_t format_log_msg_buffer;
+
+void log_free_buffer(void* p)
+{
+    if (p != NULL) free(p);
+}
+
+__attribute__((constructor)) void
+log_prepare_tsdkeys()
+{
+    pthread_key_create(&time_now_buffer, log_free_buffer);
+    pthread_key_create(&format_log_msg_buffer, log_free_buffer);
+}
+
+char *
+log_get_tsdata(pthread_key_t key, int size)
+{
+    char *p = pthread_getspecific(key);
+    if (p == 0) {
+        int res;
+        p = (char *)calloc(1, size);
+        res = pthread_setspecific(key, p);
+        if (res != 0) {
+            fprintf(stderr, "log_get_tsdata(), failed to set TSD key: %d", res);
+        }
+    }
+    return p;
+}
+
+char *
+log_get_time_buffer()
+{
+    return log_get_tsdata(time_now_buffer, TIME_NOW_BUFFER_SIZE);
+}
+
+char *
+log_get_format_buffer()
+{  
+    return log_get_tsdata(format_log_msg_buffer, FORMAT_LOG_BUFFER_SIZE);
+}
+
+log_level_t log_level = LLDB_LOG_LEVEL_INFO;
+
+static FILE *log_stream = 0;
+
+FILE *
+log_get_stream(){
+    if (log_stream == 0)
+        log_stream = stderr;
+    return log_stream;
+}
+
+void
+log_set_stream(FILE *stream)
+{
+    log_stream = stream;
+}
+
+static const char*
+log_time_now(char* now_str)
+{
+    struct timeval tv;
+    struct tm lt;
+    time_t now = 0;
+    size_t len = 0;
+    
+    gettimeofday(&tv,0);
+
+    now = tv.tv_sec;
+    localtime_r(&now, &lt);
+
+    // clone the format used by log4j ISO8601DateFormat
+    // specifically: "yyyy-MM-dd HH:mm:ss,SSS"
+
+    len = strftime(now_str, TIME_NOW_BUFFER_SIZE,
+                          "%Y-%m-%d %H:%M:%S",
+                          &lt);
+
+    len += snprintf(now_str + len,
+                    TIME_NOW_BUFFER_SIZE - len,
+                    ",%03d",
+                    (int)(tv.tv_usec/1000));
+
+    return (const char *)now_str;
+}
+
+void
+log_message(log_level_t level, int line,
+		const char* funcname, const char* message)
+{
+    static const char* level_readable_str[]={
+		"LLDB_INVALID","LLDB_ERROR","LLDB_WARN",
+		"LLDB_INFO","LLDB_DEBUG"};
+    static pid_t pid = 0;
+    if(pid == 0) pid = getpid();
+    fprintf(LOGSTREAM, "%s:%d(0x%lx):%s@%s@%d: %s\n",
+			log_time_now(log_get_time_buffer()), pid,
+            (unsigned long int) pthread_self(),
+            level_readable_str[level], funcname, line, message);
+	fflush(LOGSTREAM);
+}
+
+const char *
+log_format_message(const char* format, ...)
+{
+    va_list va;
+    char *buf = log_get_format_buffer();
+    if(buf == NULL)
+        return "log_format_message(): Unable to allocate memory buffer\n";
+    
+    va_start(va, format);
+    vsnprintf(buf, FORMAT_LOG_BUFFER_SIZE - 1, format, va);
+    va_end(va); 
+    return buf;
+}
+
+void
+log_set_debug_level(log_level_t level)
+{
+    if (level == 0) {
+        log_level = (log_level_t)0;
+        return;
+    }
+    if (level < LLDB_LOG_LEVEL_ERROR) level = LLDB_LOG_LEVEL_ERROR;
+    if (level > LLDB_LOG_LEVEL_DEBUG) level = LLDB_LOG_LEVEL_DEBUG;
+    log_level = level;
+}
+

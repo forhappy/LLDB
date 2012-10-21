@@ -26,10 +26,6 @@
 /* connection lock around accepting new connections */
 pthread_mutex_t conn_lock = PTHREAD_MUTEX_INITIALIZER;
 
-#if !defined(HAVE_GCC_ATOMICS)
-pthread_mutex_t atomics_mutex = PTHREAD_MUTEX_INITIALIZER;
-#endif
-
 static cqi_pool_t *item_pool;
 
 static MASTER_THREAD dispatcher_thread;
@@ -50,31 +46,7 @@ static pthread_cond_t init_cond;
 
 static void thread_libevent_process(int fd, short which, void *arg);
 
-unsigned short refcount_incr(unsigned short *refcount) {
-#ifdef HAVE_GCC_ATOMICS
-    return __sync_add_and_fetch(refcount, 1);
-#else
-    unsigned short res;
-    mutex_lock(&atomics_mutex);
-    (*refcount)++;
-    res = *refcount;
-    mutex_unlock(&atomics_mutex);
-    return res;
-#endif
-}
 
-unsigned short refcount_decr(unsigned short *refcount) {
-#ifdef HAVE_GCC_ATOMICS
-    return __sync_sub_and_fetch(refcount, 1);
-#else
-    unsigned short res;
-    mutex_lock(&atomics_mutex);
-    (*refcount)--;
-    res = *refcount;
-    mutex_unlock(&atomics_mutex);
-    return res;
-#endif
-}
 static void lldb_wait_for_thread_registration(int nthreads) {
     while (init_count < nthreads) {
         pthread_cond_wait(&init_cond, &init_lock);

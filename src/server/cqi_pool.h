@@ -17,6 +17,7 @@
 #define LLDB_CQI_POOL_H
 
 #include "lldbserver.h"
+#include "log.h"
 
 /** returns a fresh connection queue item. */
 extern connection_queue_item_t * cqi_pool_get_item(cqi_pool_t *pool);

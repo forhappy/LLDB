@@ -152,7 +152,7 @@ log_set_debug_level(log_level_t level)
 
 #ifdef LLDB_LOG_TEST
 
-int dummy(void)
+void * dummy(void *arg)
 {
 	LOG_DEBUG(("hello world, This is debug level.\n"));
 	LOG_INFO(("hello world, This is info level.\n"));
@@ -163,14 +163,17 @@ int dummy(void)
 
 int main(int argc, const char *argv[])
 {
-	log_set_debug_level(LLDB_LOG_LEVEL_DEBUG);
+	pthread_t thread;
 	FILE *file = fopen("lldb.log", "w+");
 	log_set_stream(file);
-	LOG_DEBUG(("hello world, This is debug level.\n"));
-	LOG_INFO(("hello world, This is info level.\n"));
-	LOG_WARN(("hello world, This is warn level.\n"));
-	LOG_ERROR(("hello world, This is error level.\n"));
-	dummy();
+	log_set_debug_level(LLDB_LOG_LEVEL_DEBUG);
+
+	LOG_DEBUG(("hello world, This is debug level."));
+	LOG_INFO(("hello world, This is info level."));
+	LOG_WARN(("hello world, This is warn level."));
+	LOG_ERROR(("hello world, This is error level."));
+	pthread_create(&thread, NULL, dummy, NULL);
+	pthread_join(thread, NULL);
 	fclose(file);
 }
 

@@ -31,7 +31,7 @@ cqi_pool_get_item(cqi_pool_t *pool)
 	
     ret = pthread_mutex_lock(&(pool->lock));
 	if (ret != 0) {
-		printf("pthread_mutex_lock() failed.\n");
+		LOG_ERROR(("pthread_mutex_lock() failed."));
 		return NULL;
 	}
 
@@ -44,17 +44,17 @@ cqi_pool_get_item(cqi_pool_t *pool)
 		if (pool->allocs == ITEMS_MAX_ALLOC){
 			ret = pthread_mutex_unlock(&(pool->lock));
 			if (ret != 0) {
-				printf("pthread_mutex_unlock() failed.\n");
+				LOG_ERROR(("pthread_mutex_unlock() failed."));
 				return NULL;
 			}
-			fprintf(stderr, "connection item pool allocated too many times.\n");
+			LOG_ERROR(("connection item pool allocated too many times."));
 			return NULL;
 		}
         /* allocate a bunch of items at once to reduce fragmentation */
         newpool = (connection_queue_item_t *) malloc(
 				sizeof(connection_queue_item_t) * ITEMS_PER_ALLOC);
         if (NULL == newpool) {
-			fprintf(stderr, "cqi_pool_get_item() failed due to out of memory.\n");
+			LOG_ERROR(("cqi_pool_get_item() failed due to out of memory."));
             return NULL;
 		} else {
 			memset(newpool, 0, sizeof(connection_queue_item_t) *
@@ -73,7 +73,7 @@ cqi_pool_get_item(cqi_pool_t *pool)
 
 	ret = pthread_mutex_unlock(&(pool->lock));
 	if (ret != 0) {
-		printf("pthread_mutex_unlock() failed.\n");
+		LOG_ERROR(("pthread_mutex_unlock() failed."));
 		return NULL;
 	}
 
@@ -94,14 +94,14 @@ cqi_pool_new(void)
 
 	ret = pthread_mutex_init(&(pool->lock), NULL);
 	if (ret != 0) {
-		printf("pthread_mutex_init() failed.\n");
+		LOG_ERROR(("pthread_mutex_init() failed."));
 		return NULL;
 	}
 
 	pool->pool = (connection_queue_item_t *)
 		malloc(sizeof(connection_queue_item_t) * INITIAL_CQI_POOL_SIZE);
 	if (pool->pool == NULL) {
-		fprintf(stderr, "cqi_pool_new() failed due to out of memory.\n");
+		LOG_ERROR(("cqi_pool_new() failed due to out of memory."));
 		return NULL;
 	} else {
 		pool->curr = pool->pool;
@@ -126,11 +126,11 @@ cqi_pool_release_item(cqi_pool_t *pool,
 	int index = -1, ret = 0;
 
     ret = pthread_mutex_lock(&(pool->lock));
-	if (ret != 0) printf("pthread_mutex_lock() failed.\n");
+	if (ret != 0) LOG_ERROR(("pthread_mutex_lock() failed."));
 	item->next = pool->curr;
 	pool->curr = item;
     ret = pthread_mutex_unlock(&(pool->lock));
-	if (ret != 0) printf("pthread_mutex_unlock() failed.\n");
+	if (ret != 0) LOG_ERROR(("pthread_mutex_unlock() failed."));
 }
 
 /** free a connection queue item pool. */
@@ -152,7 +152,7 @@ cqi_pool_free(cqi_pool_t *pool)
 }
 
 #ifdef LLDB_CQI_POOL_TEST
-#define WORKER_THREAD_SIZE 4 
+#define WORKER_THREAD_SIZE 64 
 
 void * worker_thread(void *arg)
 {
@@ -175,6 +175,7 @@ int main()
 	connection_queue_item_t *curr = NULL;
 
 	pthread_t thead[WORKER_THREAD_SIZE];
+	log_set_debug_level(LLDB_LOG_LEVEL_DEBUG);
 
 	for (int i = 0; i < WORKER_THREAD_SIZE; i++) {
 		pthread_create(&thead[i], NULL, worker_thread, pool);

@@ -27,14 +27,14 @@ void log_free_buffer(void* p)
     if (p != NULL) free(p);
 }
 
-__attribute__((constructor)) void
-log_prepare_tsdkeys()
+__attribute__((constructor)) static void
+log_prepare_tsdkeys(void)
 {
     pthread_key_create(&time_now_buffer, log_free_buffer);
     pthread_key_create(&format_log_msg_buffer, log_free_buffer);
 }
 
-char *
+static char *
 log_get_tsdata(pthread_key_t key, int size)
 {
     char *p = pthread_getspecific(key);
@@ -43,20 +43,20 @@ log_get_tsdata(pthread_key_t key, int size)
         p = (char *)calloc(1, size);
         res = pthread_setspecific(key, p);
         if (res != 0) {
-            fprintf(stderr, "log_get_tsdata(), failed to set TSD key: %d", res);
+            fprintf(stderr, "log_get_tsdata() failed to set TSD key: %d", res);
         }
     }
     return p;
 }
 
-char *
-log_get_time_buffer()
+static char *
+log_get_time_buffer(void)
 {
     return log_get_tsdata(time_now_buffer, TIME_NOW_BUFFER_SIZE);
 }
 
-char *
-log_get_format_buffer()
+static char *
+log_get_format_buffer(void)
 {  
     return log_get_tsdata(format_log_msg_buffer, FORMAT_LOG_BUFFER_SIZE);
 }
@@ -66,7 +66,8 @@ log_level_t log_level = LLDB_LOG_LEVEL_INFO;
 static FILE *log_stream = 0;
 
 FILE *
-log_get_stream(){
+log_get_stream(void)
+{
     if (log_stream == 0)
         log_stream = stderr;
     return log_stream;
@@ -128,7 +129,7 @@ log_format_message(const char* format, ...)
     va_list va;
     char *buf = log_get_format_buffer();
     if(buf == NULL)
-        return "log_format_message(): Unable to allocate memory buffer\n";
+        return "log_format_message(): unable to allocate memory buffer\n";
     
     va_start(va, format);
     vsnprintf(buf, FORMAT_LOG_BUFFER_SIZE - 1, format, va);
@@ -140,11 +141,37 @@ void
 log_set_debug_level(log_level_t level)
 {
     if (level == 0) {
-        log_level = (log_level_t)0;
+        log_level = (log_level_t) 0;
         return;
     }
     if (level < LLDB_LOG_LEVEL_ERROR) level = LLDB_LOG_LEVEL_ERROR;
     if (level > LLDB_LOG_LEVEL_DEBUG) level = LLDB_LOG_LEVEL_DEBUG;
+
     log_level = level;
 }
 
+#ifdef LLDB_LOG_TEST
+
+int dummy(void)
+{
+	LOG_DEBUG(("hello world, This is debug level.\n"));
+	LOG_INFO(("hello world, This is info level.\n"));
+	LOG_WARN(("hello world, This is warn level.\n"));
+	LOG_ERROR(("hello world, This is error level.\n"));
+
+}
+
+int main(int argc, const char *argv[])
+{
+	log_set_debug_level(LLDB_LOG_LEVEL_DEBUG);
+	FILE *file = fopen("lldb.log", "w+");
+	log_set_stream(file);
+	LOG_DEBUG(("hello world, This is debug level.\n"));
+	LOG_INFO(("hello world, This is info level.\n"));
+	LOG_WARN(("hello world, This is warn level.\n"));
+	LOG_ERROR(("hello world, This is error level.\n"));
+	dummy();
+	fclose(file);
+}
+
+#endif

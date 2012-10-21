@@ -31,10 +31,11 @@ extern "C" {
 typedef enum _log_level_e log_level_t;
 
 enum _log_level_e {
-	LLDB_LOG_LEVEL_ERROR=1,
-	LLDB_LOG_LEVEL_WARN=2,
-	LLDB_LOG_LEVEL_INFO=3,
-	LLDB_LOG_LEVEL_DEBUG=4
+	// LLDB_LOG_LEVEL_QUIET = 0,
+	LLDB_LOG_LEVEL_ERROR = 1,
+	LLDB_LOG_LEVEL_WARN  = 2,
+	LLDB_LOG_LEVEL_INFO  = 3,
+	LLDB_LOG_LEVEL_DEBUG = 4
 };
 
 extern log_level_t log_level;
@@ -54,10 +55,10 @@ extern void log_message(
 		log_level_t level, int line,
 		const char* funcname,
 		const char* message);
-
-extern const char* log_format_message(const char* format, ...);
-
-extern FILE* log_get_stream();
+extern const char * log_format_message(const char* format, ...);
+extern FILE * log_get_stream(void);
+extern void log_set_stream(FILE *stream);
+extern void log_set_debug_level(log_level_t level);
 
 #ifdef __cplusplus
 }

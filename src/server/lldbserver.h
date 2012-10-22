@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <time.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -46,10 +47,11 @@
 #include <leveldb/c.h>
 
 #include "cqi_pool.h"
-#include "connection.h"
+#include "cq_handler.h"
 #include "database.h"
 #include "thread.h"
 
+/***************** DIFFERENT KINDS OF DEFINES GOES HERE *******************/
 #define BITMASK(b) (1 << ((b) % CHAR_BIT))
 #define BITSLOT(b) ((b) / CHAR_BIT)
 #define BITSET(a, b) ((a)[BITSLOT(b)] |= BITMASK(b))
@@ -67,18 +69,31 @@
 
 /** Total item allocated times that are allowed. */
 #define ITEMS_MAX_ALLOC 256
+/**************************************************************************/
 
+
+/****************** DIFFERENT KINDS OF EXTERNS GOES HERE ******************/
+extern settings_t settings;
+/**************************************************************************/
+
+
+/***************** DIFFERENT KINDS OF TYPEDEFS GOES HERE ******************/
 typedef enum _connection_state_e connection_state_t;
+typedef enum _binary_substate_e binary_substate_t;
+typedef enum _protocol_e protocol_t;
 
 typedef struct _MASTER_THREAD_S MASTER_THREAD;
-typedef struct _SLAVE_THREAD_S SLAVE_THREAD;
-
+typedef struct _WORKER_THREAD_S WORKER_THREAD;
 typedef struct _connection_queue_item_s connection_queue_item_t;
 typedef struct _connection_queue_s connection_queue_t;
 typedef struct _connection_s connection_t;
 typedef struct _cqi_pool_s cqi_pool_t;
 typedef struct _database_s database_t;
+typedef struct _settings_s settings_t;
+/**************************************************************************/
 
+
+/******************* DIFFERENT KINDS OF ENUMS GOES HERE *******************/
 enum _connection_state_e {
 	/**< the socket which listens for connections. */
 	LISTENING,
@@ -104,12 +119,33 @@ enum _connection_state_e {
 	MAXSTATE
 };
 
+enum _binary_substate_e {
+    NO_STATE,
+    READING_SET_HEADER,
+    READING_CAS_HEADER,
+    READING_SET_VALUE,
+    READING_GET_KEY,
+    READING_STAT,
+    READING_DEL_HEADER,
+    READING_INCR_HEADER,
+    READING_FLUSH_EXPTIME,
+};
+
+enum _protocol_e {
+    ascii = 3, /* arbitrary value. */
+    binary,
+    negotiating /* Discovering the protocol */
+};
+/**************************************************************************/
+
+
+/****************** DIFFERENT KINDS OF STRUCTS GOES HERE ******************/
 struct _MASTER_THREAD_S {
 	pthread_t thread;
 	struct event_base *base;
 };
 
-struct _SLAVE_THREAD_S {
+struct _WORKER_THREAD_S {
 	/** thread id. */
 	pthread_t thread;
 	/* per-thread event_base. */
@@ -145,6 +181,9 @@ struct _connection_queue_s {
 struct _connection_s {
 	int sfd;
 	connection_state_t state;
+	binary_substate_t substate;
+    /** which state to go into after finishing current write. */
+	connection_state_t write_and_go;
 	struct event event;
 	short event_flags;
 	short which;
@@ -198,7 +237,7 @@ struct _connection_s {
 	connection_t *next;
 
 	/** thread object serving this connection. */
-	SLAVE_THREAD *thread;
+	WORKER_THREAD *thread;
 };
 
 /** connection queue item pool. */
@@ -241,5 +280,40 @@ struct _database_s {
 
 	database_t *next;
 };
+
+/** every lldbserver has a default database if user does not specify one,
+ * though lldbserver clients can create and reopen their own database
+ * on the server side, as a matter of fact, this settings_t structure
+ * contains its default database configuration, which can be loaded from
+ * external conf file when lldbserver startup. */
+struct _settings_s {
+	/***************** server settings ******************/
+	int port; /** listening on which port. */
+	const char *pidfile; /** file to store server pid. */
+	const char *logfile; /** log filename.*/
+	const char *cfgfile; /** configuration filename. */
+	log_level_t level; /** see log.h for valid log level. */
+	int nthreads; /** number of worker threads. */
+	protocol_t protocol; /** which protocol is currently spoken. */
+	/****************************************************/
+
+	/********* default database engine settings *********/
+	const char *dbname; /** default database name.*/
+	unsigned int lru_cache_size; /** leveldb's lru cache size */
+	bool create_if_missing; /** create database if it doesn't exist. */
+	bool error_if_exist; /** open database throws an error if exist. */
+	unsigned int write_buffer_size; /** leveldb's write buffer size */
+	bool paranoid_checks; /**paranoid checks */
+	unsigned int max_open_files; /** max open files */
+	unsigned block_size; /** block size */
+	unsigned int block_restart_interval; /*block restart interval */
+	/** compression support, 0: no compression, 1: snappy compression.*/
+	bool compression_support; 
+	bool verify_checksums; /** set true to verify checksums when read. */
+	bool fill_cache; /** set true if want to fill cache. */
+	bool sync; /** set true to enable sync when write. */
+	/****************************************************/
+};
+/**************************************************************************/
 
 #endif // LLDBSERVER_H
